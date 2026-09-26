@@ -1,48 +1,42 @@
-# Lyric Cue — GitHub Actions Builder
+# Lyric Cue FFGL — GitHub Builder v0.3
 
-This package lets GitHub compile the Resolume FFGL plugin on a Windows
-GitHub Actions runner. You do NOT need Visual Studio installed locally.
+This version fixes the first GitHub Actions failure.
+
+## What failed previously
+
+The Resolume FFGL Visual Studio projects requested:
+
+    Windows SDK 10.0.18362.0
+
+The current GitHub Windows 2022 runner does not have that obsolete SDK
+installed. The workflow now detects the Windows SDKs installed on the runner
+and passes the newest installed SDK to MSBuild using:
+
+    /p:WindowsTargetPlatformVersion=...
 
 ## How to use
 
-1. Create a new GitHub repository.
-2. Upload the contents of this ZIP to the repository.
-3. Open the repository on GitHub.
-4. Go to Actions.
-5. Select "Build Lyric Cue FFGL".
-6. Click "Run workflow".
-7. Wait for the build to finish.
-8. Open the completed workflow run.
-9. Download the artifact named:
+1. Replace the files in your GitHub repository with this ZIP's contents.
+2. Make sure the workflow is exactly:
 
-   LyricCue-Windows-x64
+    .github/workflows/build.yml
 
-The downloaded artifact contains:
+3. Go to GitHub -> Actions.
+4. Select "Build Lyric Cue FFGL".
+5. Click "Run workflow".
+6. Wait for the build.
+7. Download the artifact:
 
-   LyricCue.dll
+    LyricCue-Windows-x64
 
-## Install into Resolume
+8. Extract it and copy LyricCue.dll to:
 
-Close Resolume Arena, then copy:
+    Documents\Resolume\Extra Effects\
 
-   LyricCue.dll
+9. Restart Resolume Arena.
 
-to:
+## Note
 
-   Documents\Resolume\Extra Effects\
-
-Restart Arena.
-
-## Important
-
-This workflow uses a GitHub-hosted Windows runner and Microsoft's MSVC
-toolchain supplied by the runner. Visual Studio does not need to be installed
-on your own PC.
-
-The workflow checks out the current Resolume FFGL repository and builds its
-Windows x64 solution. It replaces the Gradients example implementation with
-the Lyric Cue implementation.
-
-If the official FFGL repository changes its project structure/API, the GitHub
-Actions build may fail. In that case, send the Actions build log and the
-project can be updated.
+This build uses the official Resolume FFGL repository, whose README says the
+master branch is intended for plugins compatible with Resolume 7.3.1 and up.
+The official repository also lists FFGL 2.2 as its latest stable release.
