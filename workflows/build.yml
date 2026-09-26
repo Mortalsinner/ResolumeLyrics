@@ -1,0 +1,117 @@
+name: Build Lyric Cue FFGL
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout Lyric Cue
+        uses: actions/checkout@v4
+
+      - name: Checkout Resolume FFGL SDK
+        uses: actions/checkout@v4
+        with:
+          repository: resolume/ffgl
+          path: ffgl
+          fetch-depth: 1
+
+      - name: Check installed Windows SDKs
+        id: sdk
+        shell: pwsh
+        run: |
+          $kits = "${env:ProgramFiles(x86)}\Windows Kits\10\Lib"
+
+          if (!(Test-Path $kits)) {
+            Write-Error "Windows 10 SDK installation directory was not found."
+          }
+
+          $versions = Get-ChildItem $kits -Directory |
+            Where-Object { $_.Name -match '^10\.' } |
+            Sort-Object { [version]$_.Name } -Descending
+
+          if (!$versions) {
+            Write-Error "No Windows 10 SDK versions were found."
+          }
+
+          Write-Host "Installed Windows SDKs:"
+          $versions | ForEach-Object { Write-Host $_.Name }
+
+          # The old FFGL project requests 10.0.18362.0.
+          # GitHub's current windows-2022 runner normally contains a newer SDK.
+          # Use the newest installed SDK instead of requiring the obsolete one.
+          $sdkVersion = $versions[0].Name
+
+          Write-Host "Using Windows SDK: $sdkVersion"
+          "SDK_VERSION=$sdkVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Verify FFGL project
+        shell: pwsh
+        run: |
+          $file = "ffgl/source/plugins/Gradients/FFGLGradients.cpp"
+          if (!(Test-Path $file)) {
+            Write-Error "The expected Resolume FFGL Gradients source was not found."
+          }
+
+      - name: Install Lyric Cue source
+        shell: pwsh
+        run: |
+          Copy-Item "src/LyricCue.cpp" "ffgl/source/plugins/Gradients/FFGLGradients.cpp" -Force
+          Copy-Item "src/LyricCue.h" "ffgl/source/plugins/Gradients/FFGLGradients.h" -Force
+
+      - name: Locate Visual Studio
+        id: vs
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $path = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+
+          if (!$path) {
+            Write-Error "MSVC build tools were not found."
+          }
+
+          "VS_PATH=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Build FFGL x64 Release
+        shell: cmd
+        run: |
+          call "${{ steps.vs.outputs.VS_PATH }}\Common7\Tools\VsDevCmd.bat" -arch=x64
+          msbuild "ffgl\build\windows\FFGLPlugins.sln" /m /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=${{ steps.sdk.outputs.SDK_VERSION }}
+
+      - name: Find and package DLL
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem "ffgl" -Recurse -Filter "FFGLGradients.dll" |
+            Where-Object { $_.FullName -match "\\binaries\\x64\\Release\\" } |
+            Select-Object -First 1
+
+          if (!$dll) {
+            Write-Error "FFGLGradients.dll was not found after compilation."
+          }
+
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          Copy-Item $dll.FullName "dist\LyricCue.dll"
+
+          @"
+          Lyric Cue FFGL
+
+          Install:
+          1. Close Resolume Arena.
+          2. Copy LyricCue.dll to:
+             Documents\Resolume\Extra Effects\
+          3. Restart Resolume.
+          4. Find Lyric Cue under Sources.
+          "@ | Set-Content "dist\README.txt"
+
+      - name: Upload Lyric Cue DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: LyricCue-Windows-x64
+          path: dist/
+          if-no-files-found: error
